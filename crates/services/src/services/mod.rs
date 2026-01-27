@@ -11,6 +11,7 @@ pub mod filesystem;
 pub mod filesystem_watcher;
 pub mod git;
 pub mod git_host;
+pub mod gsd;
 pub mod image;
 pub mod notification;
 pub mod oauth_credentials;

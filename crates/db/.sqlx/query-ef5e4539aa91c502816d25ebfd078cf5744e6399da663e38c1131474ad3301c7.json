@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n                id as \"id!: Uuid\",\n                session_id as \"session_id!: Uuid\",\n                role as \"role!: GsdMessageRole\",\n                content,\n                message_type as \"message_type!: GsdMessageType\",\n                metadata,\n                created_at as \"created_at!: DateTime<Utc>\"\n            FROM gsd_messages\n            WHERE session_id = $1\n            ORDER BY created_at ASC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "session_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "role!: GsdMessageRole",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "content",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "message_type!: GsdMessageType",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "metadata",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ef5e4539aa91c502816d25ebfd078cf5744e6399da663e38c1131474ad3301c7"
+}

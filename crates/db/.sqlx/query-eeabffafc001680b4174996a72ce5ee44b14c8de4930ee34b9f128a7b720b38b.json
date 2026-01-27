@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n                id as \"id!: Uuid\",\n                session_id as \"session_id!: Uuid\",\n                interaction_type as \"interaction_type!: GsdInteractionType\",\n                prompt,\n                options,\n                metadata,\n                resolved as \"resolved!: bool\",\n                response,\n                created_at as \"created_at!: DateTime<Utc>\",\n                resolved_at as \"resolved_at: DateTime<Utc>\"\n            FROM gsd_pending_interactions\n            WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "session_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "interaction_type!: GsdInteractionType",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "prompt",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "options",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "metadata",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "resolved!: bool",
+        "ordinal": 6,
+        "type_info": "Bool"
+      },
+      {
+        "name": "response",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "resolved_at: DateTime<Utc>",
+        "ordinal": 9,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "eeabffafc001680b4174996a72ce5ee44b14c8de4930ee34b9f128a7b720b38b"
+}

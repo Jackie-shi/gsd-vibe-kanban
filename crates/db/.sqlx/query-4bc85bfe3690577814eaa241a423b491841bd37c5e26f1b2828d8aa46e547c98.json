@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE gsd_generated_tasks SET approved = TRUE WHERE session_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "4bc85bfe3690577814eaa241a423b491841bd37c5e26f1b2828d8aa46e547c98"
+}

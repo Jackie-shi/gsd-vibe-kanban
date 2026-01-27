@@ -1327,6 +1327,174 @@ export const agentsApi = {
   },
 };
 
+// GSD (Get Shit Done) API for AI-powered project planning
+export interface GsdSession {
+  id: string;
+  project_id: string | null;
+  title: string;
+  status: 'active' | 'completed' | 'cancelled';
+  stage: string;
+  context: string;
+  claude_conversation_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GsdMessage {
+  id: string;
+  session_id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  message_type: 'message' | 'question' | 'progress' | 'table' | 'code' | 'banner' | 'tasks_preview' | 'scope_board' | 'roadmap_timeline' | 'status_indicator';
+  metadata: string;
+  created_at: string;
+}
+
+export interface GsdPendingInteraction {
+  id: string;
+  session_id: string;
+  interaction_type: 'text' | 'single_choice' | 'multi_choice' | 'confirmation' | 'scope_adjustment' | 'phase_selection';
+  prompt: string;
+  options: string | null;
+  metadata: string;
+  resolved: boolean;
+  response: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface GsdInteractionOption {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+export interface GsdGeneratedTask {
+  id: string;
+  session_id: string;
+  phase_number: number;
+  phase_name: string;
+  task_order: number;
+  title: string;
+  description: string | null;
+  requirements: string | null;
+  success_criteria: string | null;
+  dependencies: string | null;
+  approved: boolean;
+  created_at: string;
+}
+
+export interface GsdSessionState {
+  session: GsdSession;
+  messages: GsdMessage[];
+  pending_interaction: GsdPendingInteraction | null;
+  generated_tasks: GsdGeneratedTask[];
+}
+
+export interface GsdAssistantResponse {
+  messages: GsdMessage[];
+  pending_interaction: GsdPendingInteraction | null;
+  generated_tasks: GsdGeneratedTask[];
+}
+
+export interface SendMessageResponse {
+  user_message: GsdMessage;
+  assistant_response: GsdAssistantResponse | null;
+}
+
+export interface FinalizeSessionResponse {
+  project_id: string;
+  tasks_created: number;
+}
+
+export interface GsdStatusResponse {
+  api_configured: boolean;
+  backend: string;
+  message: string;
+}
+
+export const gsdApi = {
+  getStatus: async (): Promise<GsdStatusResponse> => {
+    const response = await makeRequest('/api/gsd/status');
+    return handleApiResponse<GsdStatusResponse>(response);
+  },
+
+  listSessions: async (activeOnly = false): Promise<GsdSession[]> => {
+    const params = activeOnly ? '?active_only=true' : '';
+    const response = await makeRequest(`/api/gsd/sessions${params}`);
+    return handleApiResponse<GsdSession[]>(response);
+  },
+
+  createSession: async (title: string): Promise<GsdSessionState> => {
+    const response = await makeRequest('/api/gsd/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ title }),
+    });
+    return handleApiResponse<GsdSessionState>(response);
+  },
+
+  getSession: async (sessionId: string): Promise<GsdSessionState> => {
+    const response = await makeRequest(`/api/gsd/sessions/${sessionId}`);
+    return handleApiResponse<GsdSessionState>(response);
+  },
+
+  updateSession: async (sessionId: string, data: Partial<GsdSession>): Promise<GsdSession> => {
+    const response = await makeRequest(`/api/gsd/sessions/${sessionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<GsdSession>(response);
+  },
+
+  deleteSession: async (sessionId: string): Promise<void> => {
+    const response = await makeRequest(`/api/gsd/sessions/${sessionId}`, {
+      method: 'DELETE',
+    });
+    return handleApiResponse<void>(response);
+  },
+
+  sendMessage: async (sessionId: string, content: string): Promise<SendMessageResponse> => {
+    const response = await makeRequest(`/api/gsd/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+    return handleApiResponse<SendMessageResponse>(response);
+  },
+
+  getMessages: async (sessionId: string): Promise<GsdMessage[]> => {
+    const response = await makeRequest(`/api/gsd/sessions/${sessionId}/messages`);
+    return handleApiResponse<GsdMessage[]>(response);
+  },
+
+  resolveInteraction: async (sessionId: string, interactionId: string, response_value: unknown): Promise<GsdAssistantResponse> => {
+    const response = await makeRequest(`/api/gsd/sessions/${sessionId}/interactions/${interactionId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ response: response_value }),
+    });
+    return handleApiResponse<GsdAssistantResponse>(response);
+  },
+
+  getGeneratedTasks: async (sessionId: string): Promise<GsdGeneratedTask[]> => {
+    const response = await makeRequest(`/api/gsd/sessions/${sessionId}/tasks`);
+    return handleApiResponse<GsdGeneratedTask[]>(response);
+  },
+
+  approveAllTasks: async (sessionId: string): Promise<number> => {
+    const response = await makeRequest(`/api/gsd/sessions/${sessionId}/tasks/approve-all`, {
+      method: 'POST',
+    });
+    return handleApiResponse<number>(response);
+  },
+
+  finalizeSession: async (sessionId: string, projectName: string, repositories: string[]): Promise<FinalizeSessionResponse> => {
+    const response = await makeRequest(`/api/gsd/sessions/${sessionId}/finalize`, {
+      method: 'POST',
+      body: JSON.stringify({ project_name: projectName, repositories }),
+    });
+    return handleApiResponse<FinalizeSessionResponse>(response);
+  },
+};
+
 // Queue API for session follow-up messages
 export const queueApi = {
   /**

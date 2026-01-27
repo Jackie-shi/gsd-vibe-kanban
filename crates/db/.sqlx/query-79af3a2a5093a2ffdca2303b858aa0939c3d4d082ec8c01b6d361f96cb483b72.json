@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM gsd_generated_tasks WHERE session_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "79af3a2a5093a2ffdca2303b858aa0939c3d4d082ec8c01b6d361f96cb483b72"
+}

@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO gsd_messages (id, session_id, role, content, message_type, metadata)\n            VALUES ($1, $2, $3, $4, $5, $6)\n            RETURNING\n                id as \"id!: Uuid\",\n                session_id as \"session_id!: Uuid\",\n                role as \"role!: GsdMessageRole\",\n                content,\n                message_type as \"message_type!: GsdMessageType\",\n                metadata,\n                created_at as \"created_at!: DateTime<Utc>\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "session_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "role!: GsdMessageRole",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "content",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "message_type!: GsdMessageType",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "metadata",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c5b524f7a622af4529f732e27938be4f53afe09294a6d52823fefaf7864f08c8"
+}

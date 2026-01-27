@@ -14,6 +14,7 @@ pub mod filesystem;
 pub mod events;
 pub mod execution_processes;
 pub mod frontend;
+pub mod gsd;
 pub mod health;
 pub mod images;
 pub mod oauth;
@@ -47,6 +48,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(scratch::router(&deployment))
         .merge(sessions::router(&deployment))
         .merge(terminal::router())
+        .merge(gsd::router(&deployment))
         .nest("/images", images::routes())
         .layer(ValidateRequestHeaderLayer::custom(
             middleware::validate_origin,

@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO gsd_generated_tasks (id, session_id, phase_number, phase_name, task_order, title, description, requirements, success_criteria, dependencies)\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)\n            RETURNING\n                id as \"id!: Uuid\",\n                session_id as \"session_id!: Uuid\",\n                phase_number as \"phase_number!: i32\",\n                phase_name,\n                task_order as \"task_order!: i32\",\n                title,\n                description,\n                requirements,\n                success_criteria,\n                dependencies,\n                approved as \"approved!: bool\",\n                created_at as \"created_at!: DateTime<Utc>\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "session_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "phase_number!: i32",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "phase_name",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "task_order!: i32",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "title",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "requirements",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "success_criteria",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "dependencies",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "approved!: bool",
+        "ordinal": 10,
+        "type_info": "Bool"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 11,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "7acbe0c12bb8b5870723c8367acbb4d8184150ed69af3d31a525e10bde354e85"
+}

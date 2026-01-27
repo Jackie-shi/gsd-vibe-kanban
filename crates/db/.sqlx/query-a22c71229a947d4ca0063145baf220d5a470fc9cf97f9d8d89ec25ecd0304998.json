@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n                id as \"id!: Uuid\",\n                project_id as \"project_id: Uuid\",\n                title,\n                status as \"status!: GsdSessionStatus\",\n                stage,\n                context,\n                claude_conversation_id,\n                created_at as \"created_at!: DateTime<Utc>\",\n                updated_at as \"updated_at!: DateTime<Utc>\"\n            FROM gsd_sessions\n            ORDER BY created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "project_id: Uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "title",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "status!: GsdSessionStatus",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "stage",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "context",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "claude_conversation_id",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "a22c71229a947d4ca0063145baf220d5a470fc9cf97f9d8d89ec25ecd0304998"
+}

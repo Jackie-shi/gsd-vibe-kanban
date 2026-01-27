@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE gsd_sessions\n            SET title = $2, status = $3, stage = $4, context = $5, claude_conversation_id = $6, project_id = $7\n            WHERE id = $1\n            RETURNING\n                id as \"id!: Uuid\",\n                project_id as \"project_id: Uuid\",\n                title,\n                status as \"status!: GsdSessionStatus\",\n                stage,\n                context,\n                claude_conversation_id,\n                created_at as \"created_at!: DateTime<Utc>\",\n                updated_at as \"updated_at!: DateTime<Utc>\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "project_id: Uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "title",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "status!: GsdSessionStatus",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "stage",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "context",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "claude_conversation_id",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "1c9fed072f81fcd5d07892fef6d0ba9e067aa9e0c9abd43ed083b5d714860977"
+}
