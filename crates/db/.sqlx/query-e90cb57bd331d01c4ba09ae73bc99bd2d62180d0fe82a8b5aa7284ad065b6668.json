@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO project_phase_reviews (id, project_id, phase_number)\n               VALUES ($1, $2, $3)\n               RETURNING id as \"id!: Uuid\", project_id as \"project_id!: Uuid\", phase_number as \"phase_number!: i32\", reviewed_at as \"reviewed_at!: DateTime<Utc>\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "project_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "phase_number!: i32",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "reviewed_at!: DateTime<Utc>",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e90cb57bd331d01c4ba09ae73bc99bd2d62180d0fe82a8b5aa7284ad065b6668"
+}

@@ -13,9 +13,10 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use db::models::{
+    auto_execution::{AutoExecutionStatus, ProjectAutoExecution},
     image::TaskImage,
     repo::{Repo, RepoError},
-    task::{CreateTask, Task, TaskWithAttemptStatus, UpdateTask},
+    task::{CreateTask, ProjectPhaseReview, Task, TaskWithAttemptStatus, UpdateTask},
     workspace::{CreateWorkspace, Workspace},
     workspace_repo::{CreateWorkspaceRepo, WorkspaceRepo},
 };
@@ -23,7 +24,7 @@ use deployment::Deployment;
 use executors::profile::ExecutorProfileId;
 use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
-use services::services::{container::ContainerService, workspace_manager::WorkspaceManager};
+use services::services::{auto_execution, container::ContainerService, workspace_manager::WorkspaceManager};
 use sqlx::Error as SqlxError;
 use ts_rs::TS;
 use utils::response::ApiResponse;
@@ -389,6 +390,60 @@ pub async fn delete_task(
     Ok((StatusCode::ACCEPTED, ResponseJson(ApiResponse::success(()))))
 }
 
+// ============================================================================
+// Phase Review endpoints
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PhaseReviewQuery {
+    pub project_id: Uuid,
+}
+
+/// Get phase reviews for a project
+pub async fn get_phase_reviews(
+    State(deployment): State<DeploymentImpl>,
+    Query(query): Query<PhaseReviewQuery>,
+) -> Result<ResponseJson<ApiResponse<Vec<ProjectPhaseReview>>>, ApiError> {
+    let reviews = ProjectPhaseReview::find_by_project_id(&deployment.db().pool, query.project_id).await?;
+    Ok(ResponseJson(ApiResponse::success(reviews)))
+}
+
+#[derive(Debug, Serialize, Deserialize, TS)]
+pub struct CreatePhaseReviewRequest {
+    pub project_id: Uuid,
+    pub phase_number: i32,
+}
+
+/// Complete a phase review — marks a phase as reviewed so the next phase can unlock.
+/// If auto-execution is paused for this phase, resumes with the next phase.
+pub async fn create_phase_review(
+    State(deployment): State<DeploymentImpl>,
+    Json(payload): Json<CreatePhaseReviewRequest>,
+) -> Result<ResponseJson<ApiResponse<ProjectPhaseReview>>, ApiError> {
+    let pool = &deployment.db().pool;
+    let id = Uuid::new_v4();
+    let review = ProjectPhaseReview::create(pool, id, payload.project_id, payload.phase_number).await
+        .map_err(|e| ApiError::Database(e))?;
+
+    // Check if auto-execution is paused for this project and resume if so
+    if let Ok(Some(auto_exec)) =
+        ProjectAutoExecution::find_active_by_project_id(pool, payload.project_id).await
+    {
+        if auto_exec.status == AutoExecutionStatus::PausedForReview
+            && auto_exec.current_phase_number == payload.phase_number
+        {
+            if let Err(e) =
+                auto_execution::resume_after_phase_review(pool, deployment.container(), &auto_exec)
+                    .await
+            {
+                tracing::error!("Auto-execution resume failed after phase review: {e}");
+            }
+        }
+    }
+
+    Ok(ResponseJson(ApiResponse::success(review)))
+}
+
 pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
     let task_actions_router = Router::new()
         .route("/", put(update_task))
@@ -403,6 +458,7 @@ pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
         .route("/", get(get_tasks).post(create_task))
         .route("/stream/ws", get(stream_tasks_ws))
         .route("/create-and-start", post(create_task_and_start))
+        .route("/phase-reviews", get(get_phase_reviews).post(create_phase_review))
         .nest("/{task_id}", task_id_router);
 
     // mount under /projects/:project_id/tasks

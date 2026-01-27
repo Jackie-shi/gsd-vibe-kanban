@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: Uuid\", project_id as \"project_id!: Uuid\", status as \"status!: AutoExecutionStatus\", current_phase_number as \"current_phase_number!: i32\", current_task_id as \"current_task_id: Uuid\", target_branch, executor_profile_id, created_at as \"created_at!: DateTime<Utc>\", updated_at as \"updated_at!: DateTime<Utc>\"\n               FROM project_auto_executions\n               WHERE project_id = $1 AND status IN ('running', 'paused_for_review')\n               ORDER BY created_at DESC\n               LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "project_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "status!: AutoExecutionStatus",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "current_phase_number!: i32",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "current_task_id: Uuid",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "target_branch",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "executor_profile_id",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 7,
+        "type_info": "Datetime"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 8,
+        "type_info": "Datetime"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e02850d45e74385a1a574b9dbe5b147da0321068a97f8947ad54dc61461fc681"
+}

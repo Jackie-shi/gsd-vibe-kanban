@@ -218,6 +218,33 @@ pub trait ContainerService {
 
     /// Finalize task execution by updating status to InReview and sending notifications
     async fn finalize_task(&self, ctx: &ExecutionContext) {
+        // Check if this task is part of an auto-execution pipeline
+        let execution_succeeded = matches!(
+            ctx.execution_process.status,
+            ExecutionProcessStatus::Completed
+        );
+        match super::auto_execution::advance_auto_execution(
+            &self.db().pool,
+            self,
+            self.git(),
+            &ctx.task,
+            &ctx.workspace,
+            execution_succeeded,
+        )
+        .await
+        {
+            Ok(true) => {
+                // Auto-execution handled this task — skip normal finalize
+                return;
+            }
+            Ok(false) => {
+                // Not in auto-execution — proceed with normal finalize
+            }
+            Err(e) => {
+                tracing::error!("Auto-execution advance failed, falling back to normal finalize: {e}");
+            }
+        }
+
         if let Err(e) =
             Task::update_status(&self.db().pool, ctx.task.id, TaskStatus::InReview).await
         {

@@ -248,6 +248,8 @@ impl GsdService {
         let mut child = Command::new("claude")
             .arg("-p") // Print mode - non-interactive
             .arg("--no-session-persistence") // Don't save session
+            .arg("--tools") // Disable all tools - GSD is planning-only
+            .arg("")
             .arg("--system-prompt")
             .arg(system_prompt)
             .stdin(Stdio::piped())
@@ -299,45 +301,161 @@ impl GsdService {
 // GSD Prompts
 // ============================================================================
 
-/// System prompt for initial project questioning
-pub const GSD_QUESTIONING_PROMPT: &str = r#"You are a project planning assistant helping users define and plan their software projects.
+/// System prompt for the full GSD (Get Shit Done) workflow
+/// This implements a comprehensive project planning experience with multiple phases:
+/// 1. Vision & Goals - Understand the core problem and vision
+/// 2. Users & Personas - Identify target users and their needs
+/// 3. Tech Stack & Constraints - Technical decisions and limitations
+/// 4. Research - Domain research and best practices
+/// 5. Requirements - Functional and non-functional requirements
+/// 6. Roadmap - Milestones and phases breakdown
+/// 7. Tasks - Actionable task generation
+pub const GSD_QUESTIONING_PROMPT: &str = r#"You are a world-class project planning assistant. Your goal is to deeply understand the user's vision and create a comprehensive, actionable project plan.
 
-Your role is to:
-1. Ask clarifying questions to understand the user's vision
-2. Help identify the scope and requirements
-3. Break down the project into manageable phases
-4. Generate actionable tasks
+## YOUR WORKFLOW
 
-Current stage: Initial questioning
+You operate in distinct phases, progressing naturally through the conversation:
 
-Guidelines:
-- Ask ONE question at a time
-- Be conversational and helpful
-- Focus on understanding the core problem being solved
-- Identify target users and their needs
-- Understand technical constraints and preferences
+### Phase 1: Vision & Goals (2-3 questions)
+- What problem are they solving?
+- What does success look like?
+- What's the scope (MVP, full product, etc.)?
 
-When you need user input, respond with a JSON block in this format:
+### Phase 2: Users & Use Cases (2-3 questions)
+- Who are the target users?
+- What are the primary use cases?
+- What workflows need to be supported?
+
+### Phase 3: Technical Context (2-3 questions)
+- What tech stack or language preferences?
+- Are there existing systems to integrate with?
+- What constraints exist (budget, timeline, team size)?
+
+### Phase 4: Feature Discovery (2-4 questions)
+- What are the must-have features?
+- What are nice-to-have features?
+- What features should be explicitly excluded?
+
+### Phase 5: Research Summary (1 question)
+After gathering context, summarize your research findings:
+- Domain best practices you'd recommend
+- Architectural patterns that fit their needs
+- Potential challenges and how to address them
+Ask if they want to add anything or make changes.
+
+### Phase 6: Requirements Synthesis
+Once they approve research, generate requirements:
+- Functional requirements (what the system must do)
+- Non-functional requirements (performance, security, etc.)
+- User stories with acceptance criteria
+
+### Phase 7: Roadmap & Phases
+Create a phased roadmap:
+- Break project into 3-5 phases/milestones
+- Each phase should deliver user value
+- Define success criteria for each phase
+
+### Phase 8: Task Generation
+Generate detailed, actionable tasks for ALL phases in the roadmap.
+
+## CRITICAL RULES
+
+1. **ONE JSON BLOCK PER RESPONSE** - Never output multiple JSON blocks
+2. **ONE QUESTION AT A TIME** - Ask one focused question, then STOP
+3. **ADAPTIVE QUESTIONING** - Skip questions if already answered in context
+4. **BUILD ON CONTEXT** - Reference their previous answers to show understanding
+5. **BE THOROUGH BUT EFFICIENT** - Ask deep questions but don't waste time on obvious answers
+6. **PLANNING ONLY - NO IMPLEMENTATION** - You are STRICTLY a planning assistant. NEVER write code, create files, execute commands, or attempt any implementation. Your ONLY output should be JSON responses as defined below. Do NOT use any tools to read, write, or modify files.
+
+## OUTPUT FORMATS
+
+### Question (for user input):
 ```json
 {
   "type": "question",
+  "stage": "vision|users|technical|features|research|requirements|roadmap|tasks",
   "interaction_type": "text|single_choice|multi_choice|confirmation",
-  "prompt": "Your question here",
+  "prompt": "Your thoughtful question here",
   "options": [
-    {"value": "opt1", "label": "Option 1", "description": "Optional description"}
+    {"value": "opt1", "label": "Option 1", "description": "Description helps user decide"}
   ]
 }
 ```
 
-When you want to display a message without needing input:
+### Message (status updates, summaries):
 ```json
 {
   "type": "message",
+  "stage": "current_stage",
   "content": "Your message here"
 }
 ```
 
-When you have enough information to generate tasks:
+### Research Summary (before requirements):
+```json
+{
+  "type": "research_summary",
+  "findings": [
+    {
+      "category": "Best Practices",
+      "items": ["Practice 1", "Practice 2"]
+    },
+    {
+      "category": "Recommended Architecture",
+      "items": ["Pattern 1", "Pattern 2"]
+    },
+    {
+      "category": "Potential Challenges",
+      "items": ["Challenge 1 and mitigation", "Challenge 2 and mitigation"]
+    }
+  ],
+  "recommendations": "Overall recommendations summary"
+}
+```
+
+### Requirements (generate .planning/REQUIREMENTS.md content):
+```json
+{
+  "type": "requirements",
+  "functional": [
+    {
+      "id": "FR-001",
+      "title": "Requirement title",
+      "description": "Detailed description",
+      "priority": "must-have|should-have|nice-to-have",
+      "user_stories": [
+        "As a [user], I want [feature] so that [benefit]"
+      ]
+    }
+  ],
+  "non_functional": [
+    {
+      "id": "NFR-001",
+      "category": "Performance|Security|Scalability|Usability|etc",
+      "requirement": "Specific requirement",
+      "acceptance_criteria": "How to verify"
+    }
+  ]
+}
+```
+
+### Roadmap (generate .planning/ROADMAP.md content):
+```json
+{
+  "type": "roadmap",
+  "milestones": [
+    {
+      "phase": 1,
+      "name": "Phase Name",
+      "goal": "What this phase delivers",
+      "success_criteria": ["Criteria 1", "Criteria 2"],
+      "estimated_tasks": 5
+    }
+  ]
+}
+```
+
+### Tasks (final output for ALL phases):
 ```json
 {
   "type": "tasks",
@@ -346,14 +464,45 @@ When you have enough information to generate tasks:
       "phase_number": 1,
       "phase_name": "Foundation",
       "tasks": [
-        {"title": "Task 1", "description": "Description"}
+        {
+          "title": "Task title",
+          "description": "Detailed task description with clear acceptance criteria",
+          "requirements": ["FR-001"],
+          "success_criteria": ["Specific criteria to verify completion"]
+        }
+      ]
+    },
+    {
+      "phase_number": 2,
+      "phase_name": "Core Features",
+      "tasks": [
+        {
+          "title": "Another task",
+          "description": "Description",
+          "requirements": ["FR-002"],
+          "success_criteria": ["Criteria"]
+        }
       ]
     }
   ]
 }
 ```
 
-Start by asking the user about their project vision."#;
+## CONVERSATION FLOW
+
+1. Start with a warm welcome and ask about their vision (Phase 1)
+2. Progress through phases naturally, using context from previous answers
+3. After ~6-10 questions, transition to research summary
+4. Ask for approval of research findings
+5. Generate requirements (show as structured format)
+6. Ask for approval of requirements
+7. Generate roadmap (show phases overview)
+8. Ask for approval of roadmap
+9. Generate detailed tasks for ALL phases in the roadmap (not just Phase 1)
+
+Remember: You're not just gathering requirements - you're their strategic partner helping them succeed. Be insightful, ask the questions they didn't know they needed to answer, and help them avoid common pitfalls.
+
+Start by warmly greeting the user and asking about their project vision."#;
 
 fn default_interaction_type() -> String {
     "text".to_string()
@@ -364,7 +513,11 @@ fn default_interaction_type() -> String {
 #[serde(tag = "type")]
 pub enum GsdResponseBlock {
     #[serde(rename = "message")]
-    Message { content: String },
+    Message {
+        content: String,
+        #[serde(default)]
+        stage: Option<String>,
+    },
 
     #[serde(rename = "question")]
     Question {
@@ -375,6 +528,8 @@ pub enum GsdResponseBlock {
         prompt: String,
         #[serde(default)]
         options: Option<Vec<GsdOption>>,
+        #[serde(default)]
+        stage: Option<String>,
     },
 
     #[serde(rename = "tasks")]
@@ -382,6 +537,59 @@ pub enum GsdResponseBlock {
 
     #[serde(rename = "progress")]
     Progress { content: String },
+
+    #[serde(rename = "research_summary")]
+    ResearchSummary {
+        findings: Vec<ResearchFinding>,
+        recommendations: String,
+    },
+
+    #[serde(rename = "requirements")]
+    Requirements {
+        functional: Vec<FunctionalRequirement>,
+        non_functional: Vec<NonFunctionalRequirement>,
+    },
+
+    #[serde(rename = "roadmap")]
+    Roadmap {
+        milestones: Vec<RoadmapMilestone>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResearchFinding {
+    pub category: String,
+    pub items: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionalRequirement {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub priority: String,
+    #[serde(default)]
+    pub user_stories: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NonFunctionalRequirement {
+    pub id: String,
+    pub category: String,
+    pub requirement: String,
+    #[serde(default)]
+    pub acceptance_criteria: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoadmapMilestone {
+    pub phase: i32,
+    pub name: String,
+    pub goal: String,
+    #[serde(default)]
+    pub success_criteria: Vec<String>,
+    #[serde(default)]
+    pub estimated_tasks: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -402,6 +610,12 @@ pub struct GsdPhase {
 pub struct GsdTask {
     pub title: String,
     pub description: Option<String>,
+    /// References to functional requirements (e.g., ["FR-001", "FR-002"])
+    #[serde(default)]
+    pub requirements: Option<Vec<String>>,
+    /// Specific criteria to verify task completion
+    #[serde(default)]
+    pub success_criteria: Option<Vec<String>>,
 }
 
 /// Parse Claude's response to extract GSD blocks
@@ -453,6 +667,7 @@ pub fn parse_gsd_response(response: &str) -> Vec<GsdResponseBlock> {
         tracing::debug!("No JSON blocks found, treating as plain message");
         blocks.push(GsdResponseBlock::Message {
             content: response.to_string(),
+            stage: None,
         });
     }
 
@@ -477,7 +692,7 @@ mod tests {
         assert_eq!(blocks.len(), 1);
 
         match &blocks[0] {
-            GsdResponseBlock::Message { content } => {
+            GsdResponseBlock::Message { content, .. } => {
                 assert_eq!(content, "Hello!");
             }
             _ => panic!("Expected message block"),
@@ -501,7 +716,7 @@ mod tests {
         assert_eq!(blocks.len(), 1);
 
         match &blocks[0] {
-            GsdResponseBlock::Question { interaction_type, prompt, options } => {
+            GsdResponseBlock::Question { interaction_type, prompt, options, .. } => {
                 assert_eq!(interaction_type, "single_choice");
                 assert_eq!(prompt, "What's your goal?");
                 assert!(options.is_some());
@@ -519,7 +734,7 @@ mod tests {
         assert_eq!(blocks.len(), 1);
 
         match &blocks[0] {
-            GsdResponseBlock::Question { interaction_type, prompt, options } => {
+            GsdResponseBlock::Question { interaction_type, prompt, options, .. } => {
                 assert_eq!(interaction_type, "text"); // Should default to "text"
                 assert_eq!(prompt, "What would you like to build?");
                 assert!(options.is_none());
@@ -537,7 +752,7 @@ mod tests {
         assert_eq!(blocks.len(), 1);
 
         match &blocks[0] {
-            GsdResponseBlock::Message { content } => {
+            GsdResponseBlock::Message { content, .. } => {
                 assert_eq!(content, "Hello from raw JSON!");
             }
             _ => panic!("Expected message block"),

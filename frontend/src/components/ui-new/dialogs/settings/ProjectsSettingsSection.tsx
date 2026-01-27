@@ -137,13 +137,14 @@ export function ProjectsSettingsSection() {
   const handleAddRepository = async () => {
     if (!selectedProjectId) return;
 
-    const repo = await RepoPickerDialog.show({
+    const result = await RepoPickerDialog.show({
       title: 'Select Git Repository',
       description: 'Choose a git repository to add to this project',
     });
 
-    if (!repo) return;
+    if (!result) return;
 
+    const repo = result.repo;
     if (repositories.some((r) => r.id === repo.id)) {
       return;
     }
