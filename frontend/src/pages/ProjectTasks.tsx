@@ -20,7 +20,7 @@ import { useProject } from '@/contexts/ProjectContext';
 import { useTaskAttempts } from '@/hooks/useTaskAttempts';
 import { useTaskAttemptWithSession } from '@/hooks/useTaskAttempt';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
-import { useBranchStatus, useAttemptExecution } from '@/hooks';
+import { useBranchStatus, useAttemptExecution, useAutoExecution } from '@/hooks';
 import { paths } from '@/lib/paths';
 import { ExecutionProcessesProvider } from '@/contexts/ExecutionProcessesContext';
 import { ClickedElementsProvider } from '@/contexts/ClickedElementsProvider';
@@ -46,8 +46,11 @@ import {
 import TaskKanbanBoard, {
   type KanbanColumns,
 } from '@/components/tasks/TaskKanbanBoard';
+import PhaseKanbanBoard from '@/components/tasks/PhaseKanbanBoard';
 import type { DragEndEvent } from '@/components/ui/shadcn-io/kanban';
 import { useProjectTasks } from '@/hooks/useProjectTasks';
+import { usePhaseReviews } from '@/hooks/usePhaseReviews';
+import { AutoExecutionDialog } from '@/components/dialogs/tasks/AutoExecutionDialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useHotkeysContext } from 'react-hotkeys-hook';
 import { TasksLayout, type LayoutMode } from '@/components/layout/TasksLayout';
@@ -168,6 +171,39 @@ export function ProjectTasks() {
     isLoading,
     error: streamError,
   } = useProjectTasks(projectId || '');
+
+  const {
+    reviewedPhases,
+    completePhaseReview,
+  } = usePhaseReviews(projectId);
+
+  const {
+    autoExecution,
+    start: startAutoExecution,
+    cancel: cancelAutoExecution,
+  } = useAutoExecution(projectId);
+
+  const handleStartAutoExecution = useCallback(() => {
+    AutoExecutionDialog.show({
+      onStart: async (targetBranch: string, executorProfileId: string) => {
+        await startAutoExecution(targetBranch, executorProfileId);
+      },
+    });
+  }, [startAutoExecution]);
+
+  const handleCancelAutoExecution = useCallback(async () => {
+    try {
+      await cancelAutoExecution();
+    } catch (err) {
+      console.error('Failed to cancel auto-execution:', err);
+    }
+  }, [cancelAutoExecution]);
+
+  // Determine if this project has phased tasks (from GSD)
+  const hasPhases = useMemo(
+    () => tasks.some((t) => t.phase_number != null),
+    [tasks]
+  );
 
   const selectedTask = useMemo(
     () => (taskId ? (tasksById[taskId] ?? null) : null),
@@ -772,6 +808,23 @@ export function ProjectTasks() {
             </p>
           </CardContent>
         </Card>
+      </div>
+    ) : hasPhases ? (
+      <div className="w-full h-full overflow-y-auto">
+        <PhaseKanbanBoard
+          tasks={tasks}
+          onDragEnd={handleDragEnd}
+          onViewTaskDetails={handleViewTaskDetails}
+          selectedTaskId={selectedTask?.id}
+          onCreateTask={handleCreateNewTask}
+          projectId={projectId!}
+          reviewedPhases={reviewedPhases}
+          onCompletePhaseReview={completePhaseReview}
+          searchQuery={searchQuery}
+          autoExecution={autoExecution}
+          onStartAutoExecution={handleStartAutoExecution}
+          onCancelAutoExecution={handleCancelAutoExecution}
+        />
       </div>
     ) : (
       <div className="w-full h-full overflow-x-auto overflow-y-auto overscroll-x-contain">

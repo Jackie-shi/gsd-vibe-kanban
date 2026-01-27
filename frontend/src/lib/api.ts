@@ -89,6 +89,8 @@ import {
   Workspace,
   StartReviewRequest,
   ReviewError,
+  ProjectPhaseReview,
+  ProjectAutoExecution,
 } from 'shared/types';
 import type { WorkspaceWithSession } from '@/types/attempt';
 import { createWorkspaceWithSession } from '@/types/attempt';
@@ -398,6 +400,19 @@ export const tasksApi = {
       method: 'DELETE',
     });
     return handleApiResponse<void>(response);
+  },
+
+  getPhaseReviews: async (projectId: string): Promise<ProjectPhaseReview[]> => {
+    const response = await makeRequest(`/api/tasks/phase-reviews?project_id=${projectId}`);
+    return handleApiResponse<ProjectPhaseReview[]>(response);
+  },
+
+  createPhaseReview: async (projectId: string, phaseNumber: number): Promise<ProjectPhaseReview> => {
+    const response = await makeRequest(`/api/tasks/phase-reviews`, {
+      method: 'POST',
+      body: JSON.stringify({ project_id: projectId, phase_number: phaseNumber }),
+    });
+    return handleApiResponse<ProjectPhaseReview>(response);
   },
 };
 
@@ -1345,7 +1360,7 @@ export interface GsdMessage {
   session_id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
-  message_type: 'message' | 'question' | 'progress' | 'table' | 'code' | 'banner' | 'tasks_preview' | 'scope_board' | 'roadmap_timeline' | 'status_indicator';
+  message_type: 'message' | 'question' | 'progress' | 'table' | 'code' | 'banner' | 'tasks_preview' | 'scope_board' | 'roadmap_timeline' | 'status_indicator' | 'research_summary' | 'requirements' | 'roadmap';
   metadata: string;
   created_at: string;
 }
@@ -1425,10 +1440,10 @@ export const gsdApi = {
     return handleApiResponse<GsdSession[]>(response);
   },
 
-  createSession: async (title: string): Promise<GsdSessionState> => {
+  createSession: async (title: string, projectPath?: string, projectId?: string): Promise<GsdSessionState> => {
     const response = await makeRequest('/api/gsd/sessions', {
       method: 'POST',
-      body: JSON.stringify({ title }),
+      body: JSON.stringify({ title, project_path: projectPath, project_id: projectId }),
     });
     return handleApiResponse<GsdSessionState>(response);
   },
@@ -1527,5 +1542,41 @@ export const queueApi = {
   getStatus: async (sessionId: string): Promise<QueueStatus> => {
     const response = await makeRequest(`/api/sessions/${sessionId}/queue`);
     return handleApiResponse<QueueStatus>(response);
+  },
+};
+
+// Auto-Execution API
+export const autoExecutionApi = {
+  start: async (
+    projectId: string,
+    data: { target_branch: string; executor_profile_id: string }
+  ): Promise<ProjectAutoExecution> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/auto-execution/start`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+    return handleApiResponse<ProjectAutoExecution>(response);
+  },
+
+  cancel: async (projectId: string): Promise<void> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/auto-execution/cancel`,
+      {
+        method: 'POST',
+      }
+    );
+    return handleApiResponse<void>(response);
+  },
+
+  getStatus: async (
+    projectId: string
+  ): Promise<ProjectAutoExecution | null> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/auto-execution/status`
+    );
+    return handleApiResponse<ProjectAutoExecution | null>(response);
   },
 };

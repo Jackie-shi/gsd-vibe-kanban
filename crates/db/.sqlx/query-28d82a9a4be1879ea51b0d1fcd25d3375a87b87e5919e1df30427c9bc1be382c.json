@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE project_auto_executions\n               SET current_phase_number = $2, current_task_id = $3, status = $4, updated_at = CURRENT_TIMESTAMP\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "28d82a9a4be1879ea51b0d1fcd25d3375a87b87e5919e1df30427c9bc1be382c"
+}

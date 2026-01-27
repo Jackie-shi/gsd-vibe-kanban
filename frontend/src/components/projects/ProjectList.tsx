@@ -5,16 +5,9 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Project } from 'shared/types';
 import { ProjectFormDialog } from '@/components/dialogs/projects/ProjectFormDialog';
-import { GsdSessionDialog } from '@/components/dialogs/gsd/GsdSessionDialog';
-import { AlertCircle, Loader2, Plus, ChevronDown, FolderPlus, Sparkles } from 'lucide-react';
+import { AlertCircle, Loader2, Plus } from 'lucide-react';
 import ProjectCard from '@/components/projects/ProjectCard.tsx';
 import { useKeyCreate, Scope } from '@/keyboard';
 import { useProjects } from '@/hooks/useProjects';
@@ -29,18 +22,9 @@ export function ProjectList() {
   const handleCreateProject = async () => {
     try {
       const result = await ProjectFormDialog.show({});
-      if (result.status === 'saved') return;
-    } catch (error) {
-      // User cancelled - do nothing
-    }
-  };
-
-  const handleCreateWithGsd = async () => {
-    try {
-      const result = await GsdSessionDialog.show({});
-      if (result.status === 'completed') {
+      if (result.status === 'saved' || result.status === 'saved_with_gsd') {
         // Navigate to the new project
-        navigate(`/projects/${result.projectId}`);
+        navigate(`/projects/${result.project.id}`);
       }
     } catch (error) {
       // User cancelled - do nothing
@@ -73,25 +57,10 @@ export function ProjectList() {
           <h1 className="text-3xl font-bold tracking-tight">{t('title')}</h1>
           <p className="text-muted-foreground">{t('subtitle')}</p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              {t('createProject')}
-              <ChevronDown className="ml-2 h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={handleCreateProject}>
-              <FolderPlus className="mr-2 h-4 w-4" />
-              Quick Create
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleCreateWithGsd}>
-              <Sparkles className="mr-2 h-4 w-4" />
-              AI Planning (GSD)
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Button onClick={handleCreateProject}>
+          <Plus className="mr-2 h-4 w-4" />
+          {t('createProject')}
+        </Button>
       </div>
 
       {(error || projectsError) && (
@@ -118,14 +87,10 @@ export function ProjectList() {
             <p className="mt-2 text-sm text-muted-foreground">
               {t('empty.description')}
             </p>
-            <div className="mt-4 flex gap-2 justify-center">
-              <Button onClick={handleCreateProject} variant="outline">
-                <FolderPlus className="mr-2 h-4 w-4" />
-                Quick Create
-              </Button>
-              <Button onClick={handleCreateWithGsd}>
-                <Sparkles className="mr-2 h-4 w-4" />
-                AI Planning (GSD)
+            <div className="mt-4">
+              <Button onClick={handleCreateProject}>
+                <Plus className="mr-2 h-4 w-4" />
+                {t('createProject')}
               </Button>
             </div>
           </CardContent>

@@ -47,6 +47,10 @@ pub enum GsdMessageType {
     ScopeBoard,
     RoadmapTimeline,
     StatusIndicator,
+    // New types for full GSD workflow
+    ResearchSummary,
+    Requirements,
+    Roadmap,
 }
 
 #[derive(Debug, Clone, Type, Serialize, Deserialize, PartialEq, TS, EnumString, Display, Default)]
@@ -129,6 +133,8 @@ pub struct GsdGeneratedTask {
 pub struct CreateGsdSession {
     pub title: String,
     pub repositories: Option<Vec<String>>, // Optional: pre-selected repository paths
+    pub project_path: Option<String>,      // Optional: project directory path for GSD
+    pub project_id: Option<Uuid>,          // Optional: link to existing project
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -271,7 +277,8 @@ impl GsdSession {
     }
 
     pub async fn create(pool: &SqlitePool, data: &CreateGsdSession, id: Uuid) -> Result<Self, sqlx::Error> {
-        sqlx::query_as!(
+        // First, create the session with title only
+        let session = sqlx::query_as!(
             GsdSession,
             r#"INSERT INTO gsd_sessions (id, title)
             VALUES ($1, $2)
@@ -289,7 +296,22 @@ impl GsdSession {
             data.title
         )
         .fetch_one(pool)
-        .await
+        .await?;
+
+        // If project_id is provided, update the session to link it
+        if let Some(project_id) = data.project_id {
+            let update = UpdateGsdSession {
+                title: None,
+                status: None,
+                stage: None,
+                context: None,
+                claude_conversation_id: None,
+                project_id: Some(project_id),
+            };
+            return Self::update(pool, id, &update).await;
+        }
+
+        Ok(session)
     }
 
     pub async fn update(pool: &SqlitePool, id: Uuid, data: &UpdateGsdSession) -> Result<Self, sqlx::Error> {

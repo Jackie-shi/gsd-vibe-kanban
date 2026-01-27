@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -12,36 +12,68 @@ import { CreateProject, Project } from 'shared/types';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { useProjectMutations } from '@/hooks/useProjectMutations';
 import { defineModal } from '@/lib/modals';
-import { RepoPickerDialog } from '@/components/dialogs/shared/RepoPickerDialog';
+import { RepoPickerDialog, RepoPickerResult } from '@/components/dialogs/shared/RepoPickerDialog';
+import { GsdSessionDialog } from '@/components/dialogs/gsd/GsdSessionDialog';
 
 export interface ProjectFormDialogProps {}
 
 export type ProjectFormDialogResult =
   | { status: 'saved'; project: Project }
+  | { status: 'saved_with_gsd'; project: Project; repoPath: string }
   | { status: 'canceled' };
 
 const ProjectFormDialogImpl = NiceModal.create<ProjectFormDialogProps>(() => {
   const modal = useModal();
+  const [pendingGsdInfo, setPendingGsdInfo] = useState<{ repoPath: string } | null>(null);
 
   const { createProject } = useProjectMutations({
-    onCreateSuccess: (project) => {
-      modal.resolve({ status: 'saved', project } as ProjectFormDialogResult);
-      modal.hide();
+    onCreateSuccess: async (project) => {
+      if (pendingGsdInfo) {
+        // User selected AI Planning - open GSD dialog
+        modal.hide();
+        try {
+          const gsdResult = await GsdSessionDialog.show({
+            projectId: project.id,
+            projectPath: pendingGsdInfo.repoPath,
+          });
+          if (gsdResult.status === 'completed') {
+            modal.resolve({ status: 'saved_with_gsd', project, repoPath: pendingGsdInfo.repoPath } as ProjectFormDialogResult);
+          } else {
+            modal.resolve({ status: 'saved', project } as ProjectFormDialogResult);
+          }
+        } catch {
+          // GSD was cancelled, but project was still created
+          modal.resolve({ status: 'saved', project } as ProjectFormDialogResult);
+        }
+        setPendingGsdInfo(null);
+      } else {
+        modal.resolve({ status: 'saved', project } as ProjectFormDialogResult);
+        modal.hide();
+      }
     },
-    onCreateError: () => {},
+    onCreateError: () => {
+      setPendingGsdInfo(null);
+    },
   });
   const createProjectMutate = createProject.mutate;
 
   const hasStartedCreateRef = useRef(false);
 
   const handlePickRepo = useCallback(async () => {
-    const repo = await RepoPickerDialog.show({
+    const result = await RepoPickerDialog.show({
       title: 'Create Project',
       description: 'Select or create a repository for your project',
+      showAiPlanningOption: true,
     });
 
-    if (repo) {
+    if (result) {
+      const { repo, useAiPlanning } = result as RepoPickerResult;
       const projectName = repo.display_name || repo.name;
+
+      // Store GSD info if user wants AI Planning
+      if (useAiPlanning) {
+        setPendingGsdInfo({ repoPath: repo.path });
+      }
 
       const createData: CreateProject = {
         name: projectName,

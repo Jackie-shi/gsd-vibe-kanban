@@ -19,7 +19,9 @@ import {
   FolderPlus,
   Loader2,
   Search,
+  Sparkles,
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { fileSystemApi, repoApi } from '@/lib/api';
 import { DirectoryEntry, Repo } from 'shared/types';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
@@ -30,6 +32,12 @@ export interface RepoPickerDialogProps {
   value?: string;
   title?: string;
   description?: string;
+  showAiPlanningOption?: boolean;
+}
+
+export interface RepoPickerResult {
+  repo: Repo;
+  useAiPlanning?: boolean;
 }
 
 type Stage = 'options' | 'existing' | 'new';
@@ -38,6 +46,7 @@ const RepoPickerDialogImpl = NiceModal.create<RepoPickerDialogProps>(
   ({
     title = 'Select Repository',
     description = 'Choose or create a git repository',
+    showAiPlanningOption = false,
   }) => {
     const { t } = useTranslation('projects');
     const modal = useModal();
@@ -55,6 +64,7 @@ const RepoPickerDialogImpl = NiceModal.create<RepoPickerDialogProps>(
     // Stage: new
     const [repoName, setRepoName] = useState('');
     const [parentPath, setParentPath] = useState('');
+    const [useAiPlanning, setUseAiPlanning] = useState(false);
 
     useEffect(() => {
       if (modal.visible) {
@@ -66,6 +76,7 @@ const RepoPickerDialogImpl = NiceModal.create<RepoPickerDialogProps>(
         setParentPath('');
         setLoadingDuration(0);
         setHasSearched(false);
+        setUseAiPlanning(false);
       }
     }, [modal.visible]);
 
@@ -109,12 +120,12 @@ const RepoPickerDialogImpl = NiceModal.create<RepoPickerDialogProps>(
       return () => clearInterval(interval);
     }, [reposLoading]);
 
-    const registerAndReturn = async (path: string) => {
+    const registerAndReturn = async (path: string, withAiPlanning = false) => {
       setIsWorking(true);
       setError('');
       try {
         const repo = await repoApi.register({ path });
-        modal.resolve(repo);
+        modal.resolve({ repo, useAiPlanning: withAiPlanning } as RepoPickerResult);
         modal.hide();
       } catch (err) {
         setError(
@@ -126,7 +137,7 @@ const RepoPickerDialogImpl = NiceModal.create<RepoPickerDialogProps>(
     };
 
     const handleSelectRepo = (repo: DirectoryEntry) => {
-      registerAndReturn(repo.path);
+      registerAndReturn(repo.path, false);
     };
 
     const handleBrowseForRepo = async () => {
@@ -136,7 +147,7 @@ const RepoPickerDialogImpl = NiceModal.create<RepoPickerDialogProps>(
         description: 'Choose an existing git repository',
       });
       if (selectedPath) {
-        registerAndReturn(selectedPath);
+        registerAndReturn(selectedPath, false);
       }
     };
 
@@ -153,7 +164,7 @@ const RepoPickerDialogImpl = NiceModal.create<RepoPickerDialogProps>(
           parent_path: parentPath.trim() || '.',
           folder_name: repoName.trim(),
         });
-        modal.resolve(repo);
+        modal.resolve({ repo, useAiPlanning } as RepoPickerResult);
         modal.hide();
       } catch (err) {
         setError(
@@ -410,6 +421,30 @@ const RepoPickerDialogImpl = NiceModal.create<RepoPickerDialogProps>(
                       </p>
                     </div>
 
+                    {showAiPlanningOption && (
+                      <div
+                        className="flex items-start gap-3 p-4 border rounded-lg bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-orange-200 dark:border-orange-800 cursor-pointer hover:shadow-md transition-shadow"
+                        onClick={() => setUseAiPlanning(!useAiPlanning)}
+                      >
+                        <Checkbox
+                          id="use-ai-planning"
+                          checked={useAiPlanning}
+                          onCheckedChange={(checked) => setUseAiPlanning(checked === true)}
+                          disabled={isWorking}
+                          className="mt-0.5"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-orange-500" />
+                            <span className="font-medium text-foreground">Use AI Planning (GSD)</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Let AI help you break down your project into tasks and phases
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     <Button
                       onClick={handleCreateRepo}
                       disabled={isWorking || !repoName.trim()}
@@ -419,6 +454,11 @@ const RepoPickerDialogImpl = NiceModal.create<RepoPickerDialogProps>(
                         <>
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                           Creating...
+                        </>
+                      ) : useAiPlanning ? (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Create & Start AI Planning
                         </>
                       ) : (
                         'Create Repository'
@@ -449,6 +489,6 @@ const RepoPickerDialogImpl = NiceModal.create<RepoPickerDialogProps>(
   }
 );
 
-export const RepoPickerDialog = defineModal<RepoPickerDialogProps, Repo | null>(
+export const RepoPickerDialog = defineModal<RepoPickerDialogProps, RepoPickerResult | null>(
   RepoPickerDialogImpl
 );

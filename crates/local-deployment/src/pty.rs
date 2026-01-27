@@ -154,6 +154,97 @@ impl PtyService {
         Ok((session_id, output_rx))
     }
 
+    /// Create a PTY session that runs a specific command instead of an interactive shell.
+    /// Used for running CLI tools like `claude /gsd:new-project` with real-time output streaming.
+    pub async fn create_command_session(
+        &self,
+        working_dir: PathBuf,
+        command: String,
+        args: Vec<String>,
+        cols: u16,
+        rows: u16,
+    ) -> Result<(Uuid, mpsc::UnboundedReceiver<Vec<u8>>), PtyError> {
+        let session_id = Uuid::new_v4();
+        let (output_tx, output_rx) = mpsc::unbounded_channel();
+
+        let result = tokio::task::spawn_blocking(move || {
+            let pty_system = NativePtySystem::default();
+
+            let pty_pair = pty_system
+                .openpty(PtySize {
+                    rows,
+                    cols,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
+                .map_err(|e| PtyError::CreateFailed(e.to_string()))?;
+
+            let mut cmd = CommandBuilder::new(&command);
+            for arg in &args {
+                cmd.arg(arg);
+            }
+            cmd.cwd(&working_dir);
+
+            // Set up terminal environment
+            cmd.env("TERM", "xterm-256color");
+            cmd.env("COLORTERM", "truecolor");
+            // Force color output for Claude CLI
+            cmd.env("FORCE_COLOR", "1");
+            cmd.env("CLICOLOR_FORCE", "1");
+
+            let child = pty_pair
+                .slave
+                .spawn_command(cmd)
+                .map_err(|e| PtyError::CreateFailed(e.to_string()))?;
+
+            let writer = pty_pair
+                .master
+                .take_writer()
+                .map_err(|e| PtyError::CreateFailed(e.to_string()))?;
+
+            let mut reader = pty_pair
+                .master
+                .try_clone_reader()
+                .map_err(|e| PtyError::CreateFailed(e.to_string()))?;
+
+            let output_handle = thread::spawn(move || {
+                let mut buf = [0u8; 4096];
+                loop {
+                    match reader.read(&mut buf) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            if output_tx.send(buf[..n].to_vec()).is_err() {
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+                drop(child);
+            });
+
+            Ok::<_, PtyError>((pty_pair.master, writer, output_handle))
+        })
+        .await
+        .map_err(|e| PtyError::CreateFailed(e.to_string()))??;
+
+        let (master, writer, output_handle) = result;
+
+        let session = PtySession {
+            writer,
+            master,
+            _output_handle: output_handle,
+            closed: false,
+        };
+
+        self.sessions
+            .lock()
+            .map_err(|e| PtyError::CreateFailed(e.to_string()))?
+            .insert(session_id, session);
+
+        Ok((session_id, output_rx))
+    }
+
     pub async fn write(&self, session_id: Uuid, data: &[u8]) -> Result<(), PtyError> {
         let mut sessions = self
             .sessions

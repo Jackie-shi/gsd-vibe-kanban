@@ -7,6 +7,55 @@ use uuid::Uuid;
 
 use super::{project::Project, workspace::Workspace};
 
+// ============================================================================
+// Phase Review tracking
+// ============================================================================
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize, TS)]
+pub struct ProjectPhaseReview {
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub phase_number: i32,
+    pub reviewed_at: DateTime<Utc>,
+}
+
+impl ProjectPhaseReview {
+    pub async fn find_by_project_id(
+        pool: &SqlitePool,
+        project_id: Uuid,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        sqlx::query_as!(
+            ProjectPhaseReview,
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", phase_number as "phase_number!: i32", reviewed_at as "reviewed_at!: DateTime<Utc>"
+               FROM project_phase_reviews
+               WHERE project_id = $1
+               ORDER BY phase_number"#,
+            project_id
+        )
+        .fetch_all(pool)
+        .await
+    }
+
+    pub async fn create(
+        pool: &SqlitePool,
+        id: Uuid,
+        project_id: Uuid,
+        phase_number: i32,
+    ) -> Result<Self, sqlx::Error> {
+        sqlx::query_as!(
+            ProjectPhaseReview,
+            r#"INSERT INTO project_phase_reviews (id, project_id, phase_number)
+               VALUES ($1, $2, $3)
+               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", phase_number as "phase_number!: i32", reviewed_at as "reviewed_at!: DateTime<Utc>""#,
+            id,
+            project_id,
+            phase_number
+        )
+        .fetch_one(pool)
+        .await
+    }
+}
+
 #[derive(
     Debug, Clone, Type, Serialize, Deserialize, PartialEq, TS, EnumString, Display, Default,
 )]
@@ -30,6 +79,9 @@ pub struct Task {
     pub description: Option<String>,
     pub status: TaskStatus,
     pub parent_workspace_id: Option<Uuid>, // Foreign key to parent Workspace
+    pub phase_number: Option<i32>,         // GSD phase number (1, 2, 3, ...)
+    pub phase_name: Option<String>,        // GSD phase name ("Foundation", "MVP Features", ...)
+    pub task_order: Option<i32>,           // Order within a phase (1, 2, 3, ...)
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -72,6 +124,9 @@ pub struct CreateTask {
     pub status: Option<TaskStatus>,
     pub parent_workspace_id: Option<Uuid>,
     pub image_ids: Option<Vec<Uuid>>,
+    pub phase_number: Option<i32>,
+    pub phase_name: Option<String>,
+    pub task_order: Option<i32>,
 }
 
 impl CreateTask {
@@ -87,6 +142,30 @@ impl CreateTask {
             status: Some(TaskStatus::Todo),
             parent_workspace_id: None,
             image_ids: None,
+            phase_number: None,
+            phase_name: None,
+            task_order: None,
+        }
+    }
+
+    pub fn from_gsd_task(
+        project_id: Uuid,
+        title: String,
+        description: Option<String>,
+        phase_number: i32,
+        phase_name: String,
+        task_order: i32,
+    ) -> Self {
+        Self {
+            project_id,
+            title,
+            description,
+            status: Some(TaskStatus::Todo),
+            parent_workspace_id: None,
+            image_ids: None,
+            phase_number: Some(phase_number),
+            phase_name: Some(phase_name),
+            task_order: Some(task_order),
         }
     }
 }
@@ -125,6 +204,9 @@ impl Task {
   t.description,
   t.status                        AS "status!: TaskStatus",
   t.parent_workspace_id           AS "parent_workspace_id: Uuid",
+  t.phase_number                  AS "phase_number: i32",
+  t.phase_name,
+  t.task_order                    AS "task_order: i32",
   t.created_at                    AS "created_at!: DateTime<Utc>",
   t.updated_at                    AS "updated_at!: DateTime<Utc>",
 
@@ -161,7 +243,7 @@ impl Task {
 
 FROM tasks t
 WHERE t.project_id = $1
-ORDER BY t.created_at DESC"#,
+ORDER BY COALESCE(t.phase_number, 999999), COALESCE(t.task_order, 999999), t.created_at DESC"#,
             project_id
         )
         .fetch_all(pool)
@@ -177,6 +259,9 @@ ORDER BY t.created_at DESC"#,
                     description: rec.description,
                     status: rec.status,
                     parent_workspace_id: rec.parent_workspace_id,
+                    phase_number: rec.phase_number,
+                    phase_name: rec.phase_name,
+                    task_order: rec.task_order,
                     created_at: rec.created_at,
                     updated_at: rec.updated_at,
                 },
@@ -192,7 +277,7 @@ ORDER BY t.created_at DESC"#,
     pub async fn find_by_id(pool: &SqlitePool, id: Uuid) -> Result<Option<Self>, sqlx::Error> {
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", phase_number as "phase_number: i32", phase_name, task_order as "task_order: i32", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                WHERE id = $1"#,
             id
@@ -204,7 +289,7 @@ ORDER BY t.created_at DESC"#,
     pub async fn find_by_rowid(pool: &SqlitePool, rowid: i64) -> Result<Option<Self>, sqlx::Error> {
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", phase_number as "phase_number: i32", phase_name, task_order as "task_order: i32", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                WHERE rowid = $1"#,
             rowid
@@ -221,15 +306,18 @@ ORDER BY t.created_at DESC"#,
         let status = data.status.clone().unwrap_or_default();
         sqlx::query_as!(
             Task,
-            r#"INSERT INTO tasks (id, project_id, title, description, status, parent_workspace_id)
-               VALUES ($1, $2, $3, $4, $5, $6)
-               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
+            r#"INSERT INTO tasks (id, project_id, title, description, status, parent_workspace_id, phase_number, phase_name, task_order)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", phase_number as "phase_number: i32", phase_name, task_order as "task_order: i32", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
             task_id,
             data.project_id,
             data.title,
             data.description,
             status,
-            data.parent_workspace_id
+            data.parent_workspace_id,
+            data.phase_number,
+            data.phase_name,
+            data.task_order
         )
         .fetch_one(pool)
         .await
@@ -249,7 +337,7 @@ ORDER BY t.created_at DESC"#,
             r#"UPDATE tasks
                SET title = $3, description = $4, status = $5, parent_workspace_id = $6
                WHERE id = $1 AND project_id = $2
-               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
+               RETURNING id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", phase_number as "phase_number: i32", phase_name, task_order as "task_order: i32", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>""#,
             id,
             project_id,
             title,
@@ -320,6 +408,79 @@ ORDER BY t.created_at DESC"#,
         Ok(result.rows_affected())
     }
 
+    /// Find the next todo task in the given phase, ordered by task_order.
+    pub async fn find_next_todo_in_phase(
+        pool: &SqlitePool,
+        project_id: Uuid,
+        phase_number: i32,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        let status = TaskStatus::Todo;
+        sqlx::query_as!(
+            Task,
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description,
+                      status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid",
+                      phase_number as "phase_number: i32", phase_name, task_order as "task_order: i32",
+                      created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+               FROM tasks
+               WHERE project_id = $1 AND phase_number = $2 AND status = $3
+               ORDER BY COALESCE(task_order, 999999) ASC
+               LIMIT 1"#,
+            project_id,
+            phase_number,
+            status,
+        )
+        .fetch_optional(pool)
+        .await
+    }
+
+    /// Find the first todo task in the next phase after the given one.
+    /// Find the first todo task with a phase assigned, ordered by phase_number then task_order.
+    pub async fn find_first_todo_with_phase(
+        pool: &SqlitePool,
+        project_id: Uuid,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        let status = TaskStatus::Todo;
+        sqlx::query_as!(
+            Task,
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description,
+                      status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid",
+                      phase_number as "phase_number: i32", phase_name, task_order as "task_order: i32",
+                      created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+               FROM tasks
+               WHERE project_id = $1 AND phase_number IS NOT NULL AND status = $2
+               ORDER BY phase_number ASC, COALESCE(task_order, 999999) ASC
+               LIMIT 1"#,
+            project_id,
+            status,
+        )
+        .fetch_optional(pool)
+        .await
+    }
+
+    pub async fn find_first_todo_in_next_phase(
+        pool: &SqlitePool,
+        project_id: Uuid,
+        current_phase_number: i32,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        let status = TaskStatus::Todo;
+        sqlx::query_as!(
+            Task,
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description,
+                      status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid",
+                      phase_number as "phase_number: i32", phase_name, task_order as "task_order: i32",
+                      created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+               FROM tasks
+               WHERE project_id = $1 AND phase_number > $2 AND status = $3
+               ORDER BY phase_number ASC, COALESCE(task_order, 999999) ASC
+               LIMIT 1"#,
+            project_id,
+            current_phase_number,
+            status,
+        )
+        .fetch_optional(pool)
+        .await
+    }
+
     pub async fn find_children_by_workspace_id(
         pool: &SqlitePool,
         workspace_id: Uuid,
@@ -327,7 +488,7 @@ ORDER BY t.created_at DESC"#,
         // Find only child tasks that have this workspace as their parent
         sqlx::query_as!(
             Task,
-            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
+            r#"SELECT id as "id!: Uuid", project_id as "project_id!: Uuid", title, description, status as "status!: TaskStatus", parent_workspace_id as "parent_workspace_id: Uuid", phase_number as "phase_number: i32", phase_name, task_order as "task_order: i32", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>"
                FROM tasks
                WHERE parent_workspace_id = $1
                ORDER BY created_at DESC"#,

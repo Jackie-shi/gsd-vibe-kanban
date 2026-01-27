@@ -87,7 +87,18 @@ export function TaskCard({
     >
       <div className="flex flex-col gap-2">
         <TaskCardHeader
-          title={task.title}
+          title={
+            task.task_order != null ? (
+              <span>
+                <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-muted text-muted-foreground text-xs font-medium mr-1.5 align-middle">
+                  {task.task_order}
+                </span>
+                {task.title}
+              </span>
+            ) : (
+              task.title
+            )
+          }
           right={
             <>
               {task.has_in_progress_attempt && (

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -8,7 +8,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Send, Check, Loader2, Sparkles } from 'lucide-react';
+import { AlertCircle, Send, Check, Loader2, Sparkles, BookOpen, FileText, Map, CheckCircle2 } from 'lucide-react';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
 import { defineModal } from '@/lib/modals';
 import {
@@ -22,8 +22,19 @@ import {
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
+// Helper to parse metadata safely
+function parseMetadata(metadata: string): Record<string, unknown> {
+  try {
+    return JSON.parse(metadata);
+  } catch {
+    return {};
+  }
+}
+
 export interface GsdSessionDialogProps {
   existingSessionId?: string;
+  projectId?: string;
+  projectPath?: string;
 }
 
 export type GsdSessionDialogResult =
@@ -34,46 +45,266 @@ export type GsdSessionDialogResult =
 // Subcomponents
 // ============================================================================
 
+// Stage indicator component
+const StageIndicator = ({ stage }: { stage: string }) => {
+  const stageInfo: Record<string, { label: string; color: string }> = {
+    vision: { label: 'Vision & Goals', color: 'text-blue-600 dark:text-blue-400' },
+    users: { label: 'Users & Use Cases', color: 'text-green-600 dark:text-green-400' },
+    technical: { label: 'Technical Context', color: 'text-purple-600 dark:text-purple-400' },
+    features: { label: 'Feature Discovery', color: 'text-orange-600 dark:text-orange-400' },
+    research: { label: 'Research', color: 'text-cyan-600 dark:text-cyan-400' },
+    requirements: { label: 'Requirements', color: 'text-pink-600 dark:text-pink-400' },
+    roadmap: { label: 'Roadmap', color: 'text-yellow-600 dark:text-yellow-400' },
+    tasks: { label: 'Task Generation', color: 'text-emerald-600 dark:text-emerald-400' },
+  };
+
+  const info = stageInfo[stage] || { label: stage, color: 'text-muted-foreground' };
+
+  return (
+    <span className={cn('text-xs font-medium uppercase tracking-wide', info.color)}>
+      {info.label}
+    </span>
+  );
+};
+
+// Research Summary Card component
+const ResearchSummaryCard = ({ metadata }: { metadata: Record<string, unknown> }) => {
+  const findings = (metadata.findings || []) as { category: string; items: string[] }[];
+  const recommendations = (metadata.recommendations || '') as string;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-cyan-600 dark:text-cyan-400">
+        <BookOpen className="h-5 w-5" />
+        <span className="font-semibold">Research Summary</span>
+      </div>
+
+      {findings.map((finding, idx) => (
+        <div key={idx} className="bg-background/50 rounded-lg p-3">
+          <div className="font-medium text-sm mb-2">{finding.category}</div>
+          <ul className="space-y-1">
+            {finding.items.map((item, itemIdx) => (
+              <li key={itemIdx} className="text-sm text-muted-foreground flex items-start gap-2">
+                <CheckCircle2 className="h-3 w-3 mt-1 flex-shrink-0 text-cyan-500" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+
+      {recommendations && (
+        <div className="bg-cyan-500/10 rounded-lg p-3 border border-cyan-500/20">
+          <div className="font-medium text-sm mb-1 text-cyan-700 dark:text-cyan-300">💡 Recommendations</div>
+          <div className="text-sm">{recommendations}</div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Requirements Card component
+const RequirementsCard = ({ metadata }: { metadata: Record<string, unknown> }) => {
+  const functional = (metadata.functional || []) as { id: string; title: string; description: string; priority: string; user_stories: string[] }[];
+  const nonFunctional = (metadata.non_functional || []) as { id: string; category: string; requirement: string; acceptance_criteria?: string }[];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-pink-600 dark:text-pink-400">
+        <FileText className="h-5 w-5" />
+        <span className="font-semibold">Requirements</span>
+      </div>
+
+      {functional.length > 0 && (
+        <div>
+          <div className="text-sm font-medium mb-2">Functional Requirements</div>
+          <div className="space-y-2">
+            {functional.map((req, idx) => (
+              <div key={idx} className="bg-background/50 rounded-lg p-3 border-l-2 border-pink-500">
+                <div className="flex items-center gap-2 justify-between">
+                  <span className="font-mono text-xs text-pink-600">{req.id}</span>
+                  <span className={cn(
+                    'text-xs px-2 py-0.5 rounded-full',
+                    req.priority === 'must-have' && 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+                    req.priority === 'should-have' && 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+                    req.priority === 'nice-to-have' && 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+                  )}>{req.priority}</span>
+                </div>
+                <div className="font-medium text-sm mt-1">{req.title}</div>
+                <div className="text-xs text-muted-foreground mt-1">{req.description}</div>
+                {req.user_stories && req.user_stories.length > 0 && (
+                  <div className="mt-2 text-xs italic text-muted-foreground">
+                    {req.user_stories[0]}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {nonFunctional.length > 0 && (
+        <div>
+          <div className="text-sm font-medium mb-2">Non-Functional Requirements</div>
+          <div className="space-y-2">
+            {nonFunctional.map((req, idx) => (
+              <div key={idx} className="bg-background/50 rounded-lg p-3 border-l-2 border-purple-500">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-purple-600">{req.id}</span>
+                  <span className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 px-2 py-0.5 rounded-full">{req.category}</span>
+                </div>
+                <div className="text-sm mt-1">{req.requirement}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Roadmap Card component
+const RoadmapCard = ({ metadata }: { metadata: Record<string, unknown> }) => {
+  const milestones = (metadata.milestones || []) as { phase: number; name: string; goal: string; success_criteria: string[]; estimated_tasks?: number }[];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-400">
+        <Map className="h-5 w-5" />
+        <span className="font-semibold">Project Roadmap</span>
+      </div>
+
+      <div className="space-y-3">
+        {milestones.map((milestone, idx) => (
+          <div key={idx} className="bg-background/50 rounded-lg p-4 border-l-4 border-yellow-500">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-600 font-bold text-sm">
+                {milestone.phase}
+              </div>
+              <div>
+                <div className="font-semibold">{milestone.name}</div>
+                <div className="text-sm text-muted-foreground">{milestone.goal}</div>
+              </div>
+            </div>
+
+            {milestone.success_criteria && milestone.success_criteria.length > 0 && (
+              <div className="mt-3 pl-11">
+                <div className="text-xs font-medium text-muted-foreground mb-1">Success Criteria:</div>
+                <ul className="space-y-1">
+                  {milestone.success_criteria.map((criteria, cIdx) => (
+                    <li key={cIdx} className="text-xs text-muted-foreground flex items-start gap-2">
+                      <CheckCircle2 className="h-3 w-3 mt-0.5 flex-shrink-0 text-yellow-500" />
+                      <span>{criteria}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {milestone.estimated_tasks && (
+              <div className="mt-2 pl-11 text-xs text-muted-foreground">
+                ~{milestone.estimated_tasks} tasks
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // Message display component
 const MessageBubble = ({ message }: { message: GsdMessage }) => {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
 
+  const metadata = useMemo(() => parseMetadata(message.metadata), [message.metadata]);
+  const stage = metadata.stage as string | undefined;
+
+  // Check if this is a special message type with structured data
+  const isResearchSummary = message.message_type === 'research_summary';
+  const isRequirements = message.message_type === 'requirements';
+  const isRoadmap = message.message_type === 'roadmap';
+  const isStructuredMessage = isResearchSummary || isRequirements || isRoadmap;
+
   return (
     <div
       className={cn(
-        'flex w-full mb-3',
+        'flex w-full mb-4',
         isUser ? 'justify-end' : 'justify-start'
       )}
     >
-      <div
-        className={cn(
-          'max-w-[85%] rounded-lg px-4 py-2',
-          isUser
-            ? 'bg-primary text-primary-foreground'
-            : isSystem
-              ? 'bg-muted/50 text-muted-foreground italic'
-              : 'bg-muted'
-        )}
-      >
-        {message.message_type === 'banner' ? (
-          <div className="font-mono text-center py-2 border-y border-current/20 my-1">
-            <div className="text-xs opacity-60">GSD</div>
-            <div className="font-bold">{message.content}</div>
+      {/* User message - orange border and shadow */}
+      {isUser && (
+        <div className="flex items-start gap-3 max-w-[85%]">
+          <div
+            className={cn(
+              'rounded-2xl px-5 py-3',
+              'bg-white dark:bg-zinc-900',
+              'border-2 border-orange-400',
+              'shadow-[0_2px_12px_rgba(251,146,60,0.25)]'
+            )}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-2 h-2 rounded-full bg-orange-400" />
+              <span className="text-xs font-semibold uppercase tracking-wide text-orange-600 dark:text-orange-400">You</span>
+            </div>
+            <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{message.content}</div>
           </div>
-        ) : message.message_type === 'code' ? (
-          <pre className="font-mono text-sm bg-black/10 p-2 rounded overflow-x-auto">
-            {message.content}
-          </pre>
-        ) : message.message_type === 'progress' ? (
-          <div className="flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>{message.content}</span>
-          </div>
-        ) : (
-          <div className="whitespace-pre-wrap">{message.content}</div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Assistant/System message */}
+      {!isUser && (
+        <div
+          className={cn(
+            'rounded-2xl px-5 py-3',
+            isSystem
+              ? 'bg-muted/50 text-muted-foreground italic border border-muted max-w-[85%]'
+              : isStructuredMessage
+                ? 'bg-muted/80 border border-border w-full max-w-[95%]'
+                : 'bg-muted/80 border border-border max-w-[85%]'
+          )}
+        >
+          {!isSystem && (
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 rounded-full bg-gray-400" />
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">GSD Assistant</span>
+              {stage && (
+                <>
+                  <span className="text-muted-foreground">•</span>
+                  <StageIndicator stage={stage} />
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Render based on message type */}
+          {message.message_type === 'banner' ? (
+            <div className="font-mono text-center py-2 border-y border-current/20 my-1">
+              <div className="text-xs opacity-60">GSD</div>
+              <div className="font-bold">{message.content}</div>
+            </div>
+          ) : message.message_type === 'code' ? (
+            <pre className="font-mono text-sm bg-black/10 p-2 rounded overflow-x-auto">
+              {message.content}
+            </pre>
+          ) : message.message_type === 'progress' ? (
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>{message.content}</span>
+            </div>
+          ) : isResearchSummary ? (
+            <ResearchSummaryCard metadata={metadata} />
+          ) : isRequirements ? (
+            <RequirementsCard metadata={metadata} />
+          ) : isRoadmap ? (
+            <RoadmapCard metadata={metadata} />
+          ) : (
+            <div className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -85,7 +316,7 @@ const InteractionRenderer = ({
   isLoading,
 }: {
   interaction: GsdPendingInteraction;
-  onResolve: (value: unknown) => void;
+  onResolve: (value: unknown, displayText: string) => void;
   isLoading: boolean;
 }) => {
   const [textValue, setTextValue] = useState('');
@@ -95,22 +326,25 @@ const InteractionRenderer = ({
     ? JSON.parse(interaction.options)
     : [];
 
-  const handleSingleChoice = (value: string) => {
-    onResolve(value);
+  const handleSingleChoice = (value: string, label: string) => {
+    onResolve(value, `✓ ${label}`);
   };
 
   const handleMultiChoice = () => {
-    onResolve(selectedValues);
+    const selectedLabels = options
+      .filter((opt) => selectedValues.includes(opt.value))
+      .map((opt) => opt.label);
+    onResolve(selectedValues, `✓ Selected: ${selectedLabels.join(', ')}`);
   };
 
   const handleTextSubmit = () => {
     if (textValue.trim()) {
-      onResolve(textValue.trim());
+      onResolve(textValue.trim(), textValue.trim());
     }
   };
 
   const handleConfirmation = (confirmed: boolean) => {
-    onResolve(confirmed);
+    onResolve(confirmed, confirmed ? '✓ Yes' : '✗ No');
   };
 
   const toggleMultiChoice = (value: string) => {
@@ -154,7 +388,7 @@ const InteractionRenderer = ({
           {options.map((option) => (
             <button
               key={option.value}
-              onClick={() => handleSingleChoice(option.value)}
+              onClick={() => handleSingleChoice(option.value, option.label)}
               disabled={isLoading}
               className={cn(
                 'w-full text-left p-3 rounded-lg border transition-colors',
@@ -262,7 +496,11 @@ const InteractionRenderer = ({
             disabled={isLoading}
           />
           <Button
-            onClick={handleTextSubmit}
+            onClick={() => {
+              if (textValue.trim()) {
+                onResolve(textValue.trim(), `✓ Selected Phase ${textValue.trim()}`);
+              }
+            }}
             disabled={!textValue.trim() || isLoading}
             className="w-full"
           >
@@ -333,7 +571,7 @@ const TasksPreview = ({ tasks }: { tasks: GsdGeneratedTask[] }) => {
 // ============================================================================
 
 const GsdSessionDialogImpl = NiceModal.create<GsdSessionDialogProps>(
-  ({ existingSessionId }) => {
+  ({ existingSessionId, projectId, projectPath }) => {
     const modal = useModal();
     const [sessionState, setSessionState] = useState<GsdSessionState | null>(null);
     const [apiStatus, setApiStatus] = useState<GsdStatusResponse | null>(null);
@@ -341,6 +579,9 @@ const GsdSessionDialogImpl = NiceModal.create<GsdSessionDialogProps>(
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // Track if we're linked to an existing project (tasks will be added to it)
+    const isLinkedToExistingProject = Boolean(projectId);
 
     // Auto-scroll to bottom when messages change
     useEffect(() => {
@@ -373,7 +614,8 @@ const GsdSessionDialogImpl = NiceModal.create<GsdSessionDialogProps>(
             const state = await gsdApi.getSession(existingSessionId);
             setSessionState(state);
           } else {
-            const state = await gsdApi.createSession('New Project');
+            // Pass projectId when creating session so tasks will be added to the existing project
+            const state = await gsdApi.createSession('New Project', projectPath, projectId);
             setSessionState(state);
           }
         } catch (err) {
@@ -386,7 +628,7 @@ const GsdSessionDialogImpl = NiceModal.create<GsdSessionDialogProps>(
       if (modal.visible) {
         initSession();
       }
-    }, [modal.visible, existingSessionId]);
+    }, [modal.visible, existingSessionId, projectPath, projectId]);
 
     const handleSendMessage = useCallback(async () => {
       if (!sessionState || !inputValue.trim() || isLoading) return;
@@ -423,11 +665,32 @@ const GsdSessionDialogImpl = NiceModal.create<GsdSessionDialogProps>(
     }, [sessionState, inputValue, isLoading]);
 
     const handleResolveInteraction = useCallback(
-      async (value: unknown) => {
+      async (value: unknown, displayText: string) => {
         if (!sessionState?.pending_interaction || isLoading) return;
 
         setIsLoading(true);
         setError(null);
+
+        // Create a local user message to display the selection immediately
+        const userSelectionMessage: GsdMessage = {
+          id: `local-${Date.now()}`,
+          session_id: sessionState.session.id,
+          role: 'user',
+          content: displayText,
+          message_type: 'message',
+          metadata: '',
+          created_at: new Date().toISOString(),
+        };
+
+        // Add user selection message immediately for visual feedback
+        setSessionState((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            messages: [...prev.messages, userSelectionMessage],
+            pending_interaction: null, // Hide interaction while loading
+          };
+        });
 
         try {
           const response = await gsdApi.resolveInteraction(
@@ -436,10 +699,11 @@ const GsdSessionDialogImpl = NiceModal.create<GsdSessionDialogProps>(
             value
           );
 
-          // Update state with new messages
+          // Update state with new messages from the server
           setSessionState((prev) => {
             if (!prev) return prev;
 
+            // Keep our user selection message and add server messages
             const newMessages = [...prev.messages, ...response.messages];
 
             return {
@@ -454,6 +718,14 @@ const GsdSessionDialogImpl = NiceModal.create<GsdSessionDialogProps>(
           });
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to process response');
+          // Restore pending interaction on error
+          setSessionState((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              pending_interaction: sessionState.pending_interaction,
+            };
+          });
         } finally {
           setIsLoading(false);
         }
@@ -504,7 +776,7 @@ const GsdSessionDialogImpl = NiceModal.create<GsdSessionDialogProps>(
 
     return (
       <Dialog open={modal.visible} onOpenChange={(open) => !open && handleCancel()}>
-        <DialogContent className="sm:max-w-[700px] h-[80vh] flex flex-col">
+        <DialogContent className="sm:max-w-[1000px] lg:max-w-[1300px] xl:max-w-[1500px] h-[90vh] max-h-[900px] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
@@ -608,7 +880,9 @@ const GsdSessionDialogImpl = NiceModal.create<GsdSessionDialogProps>(
                     ) : (
                       <Check className="h-4 w-4 mr-2" />
                     )}
-                    Create Project ({sessionState.generated_tasks.length} tasks)
+                    {isLinkedToExistingProject
+                      ? `Create Tasks (${sessionState.generated_tasks.length})`
+                      : `Create Project (${sessionState.generated_tasks.length} tasks)`}
                   </Button>
                 )}
             </div>
