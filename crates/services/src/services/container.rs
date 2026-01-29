@@ -226,7 +226,6 @@ pub trait ContainerService {
         match super::auto_execution::advance_auto_execution(
             &self.db().pool,
             self,
-            self.git(),
             &ctx.task,
             &ctx.workspace,
             execution_succeeded,

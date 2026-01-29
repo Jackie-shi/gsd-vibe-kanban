@@ -185,8 +185,8 @@ export function ProjectTasks() {
 
   const handleStartAutoExecution = useCallback(() => {
     AutoExecutionDialog.show({
-      onStart: async (targetBranch: string, executorProfileId: string) => {
-        await startAutoExecution(targetBranch, executorProfileId);
+      onStart: async (executorProfileId: string) => {
+        await startAutoExecution(executorProfileId);
       },
     });
   }, [startAutoExecution]);

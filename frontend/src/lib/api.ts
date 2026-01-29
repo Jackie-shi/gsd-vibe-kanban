@@ -1549,7 +1549,7 @@ export const queueApi = {
 export const autoExecutionApi = {
   start: async (
     projectId: string,
-    data: { target_branch: string; executor_profile_id: string }
+    data: { executor_profile_id: string }
   ): Promise<ProjectAutoExecution> => {
     const response = await makeRequest(
       `/api/projects/${projectId}/auto-execution/start`,

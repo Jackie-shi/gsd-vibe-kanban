@@ -40,10 +40,12 @@ impl ProjectAutoExecution {
         project_id: Uuid,
         current_phase_number: i32,
         current_task_id: Uuid,
-        target_branch: &str,
         executor_profile_id: &str,
     ) -> Result<Self, sqlx::Error> {
         let status = AutoExecutionStatus::Running;
+        // target_branch is no longer used (tasks go to InReview for manual merge)
+        // but kept in DB for backward compatibility
+        let target_branch = "";
         sqlx::query_as!(
             ProjectAutoExecution,
             r#"INSERT INTO project_auto_executions (id, project_id, status, current_phase_number, current_task_id, target_branch, executor_profile_id)

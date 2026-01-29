@@ -24,7 +24,6 @@ use crate::{DeploymentImpl, error::ApiError};
 
 #[derive(Debug, Deserialize, Serialize, TS)]
 pub struct StartAutoExecutionRequest {
-    pub target_branch: String,
     pub executor_profile_id: String,
 }
 
@@ -63,7 +62,6 @@ pub async fn start_auto_execution(
         project_id,
         phase_number,
         first_task.id,
-        &payload.target_branch,
         &payload.executor_profile_id,
     )
     .await?;
@@ -78,15 +76,30 @@ pub async fn start_auto_execution(
         ));
     }
 
-    // Compute agent_working_dir (same logic as create_task_attempt)
-    let agent_working_dir = if project_repos.len() == 1 {
-        let repo = Repo::find_by_id(pool, project_repos[0].repo_id)
+    // Build workspace repos with each repo's default target branch
+    let mut workspace_repos_to_create: Vec<CreateWorkspaceRepo> = Vec::new();
+    let mut agent_working_dir: Option<String> = None;
+
+    for (i, pr) in project_repos.iter().enumerate() {
+        let repo = Repo::find_by_id(pool, pr.repo_id)
             .await?
             .ok_or(ApiError::BadRequest("Repo not found".to_string()))?;
-        Some(repo.name)
-    } else {
-        None
-    };
+
+        // For single repo projects, set agent_working_dir
+        if project_repos.len() == 1 && i == 0 {
+            agent_working_dir = Some(repo.name.clone());
+        }
+
+        // Use repo's default_target_branch or fallback to "main"
+        let target_branch = repo
+            .default_target_branch
+            .unwrap_or_else(|| "main".to_string());
+
+        workspace_repos_to_create.push(CreateWorkspaceRepo {
+            repo_id: pr.repo_id,
+            target_branch,
+        });
+    }
 
     let attempt_id = Uuid::new_v4();
     let git_branch_name = deployment
@@ -105,15 +118,7 @@ pub async fn start_auto_execution(
     )
     .await?;
 
-    let workspace_repos: Vec<CreateWorkspaceRepo> = project_repos
-        .iter()
-        .map(|pr| CreateWorkspaceRepo {
-            repo_id: pr.repo_id,
-            target_branch: payload.target_branch.clone(),
-        })
-        .collect();
-
-    WorkspaceRepo::create_many(pool, workspace.id, &workspace_repos).await?;
+    WorkspaceRepo::create_many(pool, workspace.id, &workspace_repos_to_create).await?;
 
     // Parse executor profile from JSON string
     let executor_profile_id: ExecutorProfileId =
