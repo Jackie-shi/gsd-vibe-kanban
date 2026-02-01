@@ -6,7 +6,7 @@ export interface UseAutoExecutionResult {
   autoExecution: ProjectAutoExecution | null;
   isLoading: boolean;
   isActive: boolean;
-  start: (targetBranch: string, executorProfileId: string) => Promise<void>;
+  start: (executorProfileId: string) => Promise<void>;
   cancel: () => Promise<void>;
 }
 
@@ -75,10 +75,9 @@ export const useAutoExecution = (
   }, [isActive, projectId, fetchStatus]);
 
   const start = useCallback(
-    async (targetBranch: string, executorProfileId: string) => {
+    async (executorProfileId: string) => {
       if (!projectId) return;
       const result = await autoExecutionApi.start(projectId, {
-        target_branch: targetBranch,
         executor_profile_id: executorProfileId,
       });
       setAutoExecution(result);

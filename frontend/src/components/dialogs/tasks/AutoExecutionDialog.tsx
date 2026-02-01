@@ -9,12 +9,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import RepoBranchSelector from '@/components/tasks/RepoBranchSelector';
 import { ExecutorProfileSelector } from '@/components/settings';
-import {
-  useProjectRepos,
-  useRepoBranchSelection,
-} from '@/hooks';
+import { useProjectRepos } from '@/hooks';
 import { useProject } from '@/contexts/ProjectContext';
 import { useUserSystem } from '@/components/ConfigProvider';
 import NiceModal, { useModal } from '@ebay/nice-modal-react';
@@ -22,7 +18,7 @@ import { defineModal } from '@/lib/modals';
 import type { ExecutorProfileId } from 'shared/types';
 
 export interface AutoExecutionDialogProps {
-  onStart: (targetBranch: string, executorProfileId: string) => Promise<void>;
+  onStart: (executorProfileId: string) => Promise<void>;
 }
 
 const AutoExecutionDialogImpl = NiceModal.create<AutoExecutionDialogProps>(
@@ -40,50 +36,31 @@ const AutoExecutionDialogImpl = NiceModal.create<AutoExecutionDialogProps>(
     const { data: projectRepos = [], isLoading: isLoadingRepos } =
       useProjectRepos(projectId, { enabled: modal.visible });
 
-    const {
-      configs: repoBranchConfigs,
-      isLoading: isLoadingBranches,
-      setRepoBranch,
-      reset: resetBranchSelection,
-    } = useRepoBranchSelection({
-      repos: projectRepos,
-      enabled: modal.visible && projectRepos.length > 0,
-    });
-
     useEffect(() => {
       if (!modal.visible) {
         setUserSelectedProfile(null);
         setError(null);
         setIsStarting(false);
-        resetBranchSelection();
       }
-    }, [modal.visible, resetBranchSelection]);
+    }, [modal.visible]);
 
     const defaultProfile = config?.executor_profile ?? null;
     const effectiveProfile = userSelectedProfile ?? defaultProfile;
 
-    const isLoadingInitial = isLoadingRepos || isLoadingBranches;
-
-    const firstBranch = repoBranchConfigs[0]?.targetBranch;
-    const allBranchesSelected = repoBranchConfigs.every(
-      (c) => c.targetBranch !== null
-    );
-
     const canStart = Boolean(
       effectiveProfile &&
-        allBranchesSelected &&
         projectRepos.length > 0 &&
         !isStarting &&
-        !isLoadingInitial
+        !isLoadingRepos
     );
 
     const handleStart = async () => {
-      if (!effectiveProfile || !firstBranch) return;
+      if (!effectiveProfile) return;
       setIsStarting(true);
       setError(null);
       try {
         const executorProfileIdStr = JSON.stringify(effectiveProfile);
-        await onStart(firstBranch, executorProfileIdStr);
+        await onStart(executorProfileIdStr);
         modal.hide();
       } catch (err) {
         console.error('Failed to start auto-execution:', err);
@@ -104,7 +81,7 @@ const AutoExecutionDialogImpl = NiceModal.create<AutoExecutionDialogProps>(
             <DialogDescription>
               {t(
                 'autoExecution.dialogDescription',
-                'Automatically execute all tasks across phases sequentially. Tasks will be auto-merged after completion, pausing between phases for review.'
+                'Automatically execute all tasks across phases sequentially. Completed tasks will be set to review status for manual merge.'
               )}
             </DialogDescription>
           </DialogHeader>
@@ -120,13 +97,6 @@ const AutoExecutionDialogImpl = NiceModal.create<AutoExecutionDialogProps>(
                 />
               </div>
             )}
-
-            <RepoBranchSelector
-              configs={repoBranchConfigs}
-              onBranchChange={setRepoBranch}
-              isLoading={isLoadingBranches}
-              className="space-y-2"
-            />
 
             {error && (
               <div className="text-sm text-destructive">{error}</div>

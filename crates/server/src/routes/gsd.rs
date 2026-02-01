@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use services::services::gsd::{
     GsdService, GsdResponseBlock, ClaudeMessage, parse_gsd_response, GSD_QUESTIONING_PROMPT,
     ResearchFinding, FunctionalRequirement, NonFunctionalRequirement, RoadmapMilestone,
+    GsdPhase, GsdTask,
 };
 use ts_rs::TS;
 use utils::response::ApiResponse;
@@ -199,6 +200,164 @@ fn generate_config_json(title: &str) -> String {
         }
     }))
     .unwrap_or_else(|_| "{}".to_string())
+}
+
+/// Generate a slug from a string (lowercase, hyphenated)
+fn slugify(s: &str) -> String {
+    s.to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+/// Generate PLAN.md content for a phase
+fn generate_phase_plan(phase_number: i32, phase_name: &str, tasks: &[GsdTask]) -> String {
+    let now = Utc::now().format("%Y-%m-%d");
+    let mut output = format!(
+        "# Phase {}: {}\n\n\
+        > Generated: {}\n\n\
+        ## Overview\n\n\
+        This phase contains {} task(s).\n\n\
+        ## Tasks\n\n",
+        phase_number, phase_name, now, tasks.len()
+    );
+
+    for (idx, task) in tasks.iter().enumerate() {
+        let task_num = idx + 1;
+        output.push_str(&format!("### {}. {}\n\n", task_num, task.title));
+
+        if let Some(ref desc) = task.description {
+            // Only show first line as summary in PLAN.md
+            let summary = desc.lines().next().unwrap_or("");
+            output.push_str(&format!("{}\n\n", summary));
+        }
+
+        if let Some(ref criteria) = task.success_criteria {
+            if !criteria.is_empty() {
+                output.push_str("**Success Criteria:**\n");
+                for c in criteria {
+                    output.push_str(&format!("- [ ] {}\n", c));
+                }
+                output.push('\n');
+            }
+        }
+    }
+
+    output.push_str("## Progress\n\n");
+    output.push_str("| Task | Status | Notes |\n");
+    output.push_str("|------|--------|-------|\n");
+    for (idx, task) in tasks.iter().enumerate() {
+        output.push_str(&format!("| {}. {} | ⏳ Pending | |\n", idx + 1, task.title));
+    }
+
+    output
+}
+
+/// Generate markdown content for a single task file
+fn generate_task_file(
+    task_order: i32,
+    task: &GsdTask,
+    phase_number: i32,
+    phase_name: &str,
+) -> String {
+    let now = Utc::now().format("%Y-%m-%d");
+    let mut output = format!(
+        "# Task {}.{}: {}\n\n\
+        > Phase: {} - {}\n\
+        > Generated: {}\n\
+        > Status: ⏳ Pending\n\n",
+        phase_number, task_order, task.title,
+        phase_number, phase_name, now
+    );
+
+    // Add description (which should now contain Overview, Implementation Steps, Technical Notes)
+    if let Some(ref desc) = task.description {
+        output.push_str(desc);
+        output.push_str("\n\n");
+    }
+
+    // Add requirements references
+    if let Some(ref reqs) = task.requirements {
+        if !reqs.is_empty() {
+            output.push_str("## Related Requirements\n\n");
+            for req in reqs {
+                output.push_str(&format!("- {}\n", req));
+            }
+            output.push('\n');
+        }
+    }
+
+    // Add success criteria as checklist
+    if let Some(ref criteria) = task.success_criteria {
+        if !criteria.is_empty() {
+            output.push_str("## Acceptance Criteria\n\n");
+            for c in criteria {
+                output.push_str(&format!("- [ ] {}\n", c));
+            }
+            output.push('\n');
+        }
+    }
+
+    // Add execution log section
+    output.push_str("---\n\n## Execution Log\n\n");
+    output.push_str("*Record your progress, decisions, and notes here as you work on this task.*\n\n");
+    output.push_str("### Session Notes\n\n");
+    output.push_str("<!-- Add your notes below -->\n\n");
+
+    output
+}
+
+/// Write phase files to .planning/phases/ directory
+async fn write_phase_files(
+    project_path: &std::path::Path,
+    phases: &[GsdPhase],
+) {
+    let phases_dir = project_path.join(".planning").join("phases");
+
+    for phase in phases {
+        // Create phase directory: phase-1-foundation
+        let phase_slug = slugify(&phase.phase_name);
+        let phase_dir_name = format!("phase-{}-{}", phase.phase_number, phase_slug);
+        let phase_dir = phases_dir.join(&phase_dir_name);
+
+        if let Err(e) = tokio::fs::create_dir_all(&phase_dir).await {
+            tracing::error!("Failed to create phase directory {:?}: {}", phase_dir, e);
+            continue;
+        }
+
+        // Write PLAN.md for the phase
+        let plan_content = generate_phase_plan(phase.phase_number, &phase.phase_name, &phase.tasks);
+        let plan_path = phase_dir.join("PLAN.md");
+        if let Err(e) = tokio::fs::write(&plan_path, &plan_content).await {
+            tracing::error!("Failed to write {:?}: {}", plan_path, e);
+        } else {
+            tracing::info!("Written {:?}", plan_path);
+        }
+
+        // Write individual task files
+        for (idx, task) in phase.tasks.iter().enumerate() {
+            let task_order = idx as i32 + 1;
+            let task_slug = slugify(&task.title);
+            // Truncate slug to reasonable length
+            let task_slug_short = task_slug.chars().take(50).collect::<String>();
+            let task_filename = format!("task-{:02}-{}.md", task_order, task_slug_short);
+
+            let task_content = generate_task_file(task_order, task, phase.phase_number, &phase.phase_name);
+            let task_path = phase_dir.join(&task_filename);
+
+            if let Err(e) = tokio::fs::write(&task_path, &task_content).await {
+                tracing::error!("Failed to write {:?}: {}", task_path, e);
+            } else {
+                tracing::info!("Written {:?}", task_path);
+            }
+        }
+    }
+
+    tracing::info!("Written phase files for {} phases to {:?}", phases.len(), phases_dir);
 }
 
 /// Process Claude's response into messages, interactions, and tasks
@@ -406,8 +565,8 @@ async fn process_claude_response(
                 let msg = GsdMessage::create(pool, &msg_data, msg_id).await?;
                 messages.push(msg);
 
-                // Create the tasks
-                for phase in phases {
+                // Create the tasks in database
+                for phase in &phases {
                     for (idx, task) in phase.tasks.iter().enumerate() {
                         let task_data = CreateGsdGeneratedTask {
                             session_id,
@@ -424,6 +583,12 @@ async fn process_claude_response(
                         let created_task = GsdGeneratedTask::create(pool, &task_data, task_id).await?;
                         generated_tasks.push(created_task);
                     }
+                }
+
+                // Write phase files to .planning/phases/
+                if let Some(path) = project_path {
+                    write_phase_files(path, &phases).await;
+                    tracing::info!("Written phase files to {:?}/.planning/phases/", path);
                 }
 
                 // STOP processing after tasks - this is the final output
